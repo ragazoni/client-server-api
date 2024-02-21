@@ -2,24 +2,93 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
+type CurrencyData struct {
+	USDBRL struct {
+		Code       string `json:"code"`
+		Codein     string `json:"codein"`
+		Name       string `json:"name"`
+		High       string `json:"high"`
+		Low        string `json:"low"`
+		VarBid     string `json:"varBid"`
+		PctChange  string `json:"pctChange"`
+		Bid        string `json:"bid"`
+		Ask        string `json:"ask"`
+		Timestamp  string `json:"timestamp"`
+		CreateDate string `json:"create_date"`
+	} `json:"USDBRL"`
+}
+
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+	db, err := sql.Open("sqlite3", "./cotacao.db")
 	if err != nil {
-		panic(err)
+		fmt.Println("Error opening database connection:", err)
+		return
 	}
-	resp, err := http.DefaultClient.Do(req)
+	defer db.Close()
+
+	stmt, err := db.Prepare("INSERT INTO cotacoes(data, bid) VALUES(?,?)")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	defer resp.Body.Close()
-	//pegar resultado do body para mostrar o resultado
-	io.Copy(os.Stdout, resp.Body)
+	defer stmt.Close()
+
+	http.HandleFunc("/cotacao", func(w http.ResponseWriter, r *http.Request) {
+		_, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		req, err := http.NewRequest("GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Erro ao buscar cotação do dólar", http.StatusInternalServerError)
+			return
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Erro ao buscar cotação do dólar", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Erro ao buscar cotação do dólar", http.StatusInternalServerError)
+			return
+		}
+
+		var currencyData CurrencyData
+		err = json.Unmarshal(body, &currencyData)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Erro ao buscar cotação do dólar", http.StatusInternalServerError)
+			return
+		}
+
+		// Save bid value to database
+		_, err = stmt.Exec(time.Now(), currencyData.USDBRL.Bid)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Erro ao salvar cotação no banco de dados", http.StatusInternalServerError)
+			return
+		}
+
+		// Respond with the entire CurrencyData struct
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(currencyData)
+	})
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
