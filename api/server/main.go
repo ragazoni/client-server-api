@@ -77,7 +77,6 @@ func main() {
 			return
 		}
 
-		// Save bid value to database
 		_, err = stmt.Exec(time.Now(), currencyData.USDBRL.Bid)
 		if err != nil {
 			log.Println(err)
@@ -85,7 +84,6 @@ func main() {
 			return
 		}
 
-		// Respond with the entire CurrencyData struct
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(currencyData)
 	})
