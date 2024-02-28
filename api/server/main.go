@@ -37,6 +37,16 @@ func main() {
 	}
 	defer db.Close()
 
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS cotacoes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		bid DECIMAL(10,2)
+	)`)
+	if err != nil {
+		fmt.Println("Error creating cotacoes table:", err)
+		return
+	}
+
 	stmt, err := db.Prepare("INSERT INTO cotacoes(data, bid) VALUES(?,?)")
 	if err != nil {
 		log.Fatal(err)
