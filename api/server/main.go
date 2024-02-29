@@ -54,10 +54,11 @@ func main() {
 	defer stmt.Close()
 
 	http.HandleFunc("/cotacao", func(w http.ResponseWriter, r *http.Request) {
-		_, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
-		req, err := http.NewRequest("GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+		url := "https://economia.awesomeapi.com.br/json/last/USD-BRL"
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "Erro ao buscar cotação do dólar", http.StatusInternalServerError)
@@ -87,7 +88,10 @@ func main() {
 			return
 		}
 
-		_, err = stmt.Exec(time.Now(), currencyData.USDBRL.Bid)
+		ctxDB, cancelDB := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancelDB()
+
+		_, err = stmt.ExecContext(ctxDB, time.Now(), currencyData.USDBRL.Bid)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "Erro ao salvar cotação no banco de dados", http.StatusInternalServerError)
